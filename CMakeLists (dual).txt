@@ -1,0 +1,85 @@
+cmake_minimum_required(VERSION 3.16...3.26)
+
+project(DualOusterRawData LANGUAGES CXX C)
+
+# Set policies to suppress warnings
+cmake_policy(SET CMP0144 NEW) # Use <PACKAGENAME>_ROOT variables
+cmake_policy(SET CMP0167 NEW) # Suppress FindBoost deprecation warning
+
+# Compiler settings
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+add_compile_options(-Wall -Wextra)
+
+# Path to Ouster SDK
+set(OUSTER_SDK_PATH "/usr/local" CACHE PATH "Path to Ouster SDK")
+
+# Path to PCL
+set(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl" CACHE PATH "Path to PCL CMake configuration")
+
+# Disable MPI where possible
+set(VTK_USE_MPI OFF) # Disable VTK MPI support
+set(PCL_FIND_MPI OFF) # Disable PCL MPI search
+set(PCL_NO_PRECOMPILE ON) # Avoid PCL precompilation issues
+
+# Find MPI explicitly
+find_package(MPI REQUIRED COMPONENTS C)
+
+# Find VTK with components required by PCL common and io
+find_package(VTK REQUIRED COMPONENTS 
+    CommonCore
+    CommonDataModel
+    IOImage
+    IOLegacy
+    IOPLY
+    NO_MODULE
+)
+
+# Find packages
+find_package(OusterSDK REQUIRED HINTS ${OUSTER_SDK_PATH}/lib/cmake/OusterSDK)
+find_package(PCL 1.12 REQUIRED COMPONENTS common io)
+find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(Threads REQUIRED)
+
+# Manual jsoncpp detection to avoid target conflict
+find_library(JSONCPP_LIBRARY NAMES jsoncpp libjsoncpp HINTS /usr/lib/x86_64-linux-gnu /usr/local/lib)
+find_path(JSONCPP_INCLUDE_DIR json/json.h HINTS /usr/include/jsoncpp /usr/local/include)
+if(NOT JSONCPP_LIBRARY OR NOT JSONCPP_INCLUDE_DIR)
+    message(FATAL_ERROR "jsoncpp not found. Install libjsoncpp-dev.")
+endif()
+
+# Include directories
+include_directories(
+    ${OUSTER_SDK_PATH}/include
+    ${PCL_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS}
+    ${JSONCPP_INCLUDE_DIR}
+    ${VTK_INCLUDE_DIRS}
+    ${MPI_C_INCLUDE_DIRS}
+)
+
+# Add PCL, VTK, and MPI definitions
+add_definitions(${PCL_DEFINITIONS})
+add_definitions(${VTK_DEFINITIONS})
+add_definitions(${MPI_C_DEFINITIONS})
+
+# Executable
+add_executable(dual_ouster_raw dual_lidar_raw_data_to_pcd.cpp)
+
+# Link libraries
+target_link_libraries(dual_ouster_raw
+    PRIVATE
+        OusterSDK::ouster_client
+        ${PCL_LIBRARIES}
+        VTK::CommonCore
+        VTK::CommonDataModel
+        VTK::IOImage
+        VTK::IOLegacy
+        VTK::IOPLY
+        Boost::filesystem
+        ${JSONCPP_LIBRARY}
+        Threads::Threads
+        MPI::MPI_C
+)
